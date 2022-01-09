@@ -1,0 +1,163 @@
+---
+title: "PM2.5 Emissions Data Analysis"
+author: "Shevarev, M.V."
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+Fine particulate matter (PM2.5) is an ambient air pollutant for which there is strong evidence that it is harmful to human health. In the United States, the Environmental Protection Agency (EPA) is tasked with setting national ambient air quality standards for fine PM and for tracking the emissions of this pollutant into the atmosphere. Approximatly every 3 years, the EPA releases its database on emissions of PM2.5. This database is known as the National Emissions Inventory (NEI). You can read more information about the NEI at the [EPA National Emissions Inventory web site](http://www.epa.gov/ttn/chief/eiinformation.html).
+
+## Data
+
+The data for this assignment are available from the course web site as a single zip file:
+
+* [Data](https://d396qusza40orc.cloudfront.net/exdata%2Fdata%2FNEI_data.zip)
+
+The zip file contains two files:
+
+PM2.5 Emissions Data (summarySCC_PM25.rds): This file contains a data frame with all of the PM2.5 emissions data for 1999, 2002, 2005, and 2008. For each year, the table contains number of tons of PM2.5 emitted from a specific type of source for the entire year. Here are the first few rows.
+
+* fips: A five-digit number (represented as a string) indicating the U.S. county
+
+* SCC: The name of the source as indicated by a digit string (see source code classification table)
+
+* Pollutant: A string indicating the pollutant
+
+* Emissions: Amount of PM2.5 emitted, in tons
+
+* type: The type of source (point, non-point, on-road, or non-road)
+
+* year: The year of emissions recorded
+
+Source Classification Code Table (Source_Classification_Code.rds): This table provides a mapping from the SCC digit strings in the Emissions table to the actual name of the PM2.5 source. The sources are categorized in a few different ways from more general to more specific and you may choose to explore whatever categories you think are most useful. For example, source “10100101” is known as “Ext Comb /Electric Gen /Anthracite Coal /Pulverized Coal”.
+
+## Loading and preprocessing the data
+
+```{R simulation, echo = FALSE, results = "hide", warning=FALSE,  message=FALSE}
+##install.packages(c("tidyverse", "knitr", "lemon", "kableExtra"))
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(lemon)
+library(kableExtra)
+library(knitr)
+```
+
+```{R}
+currdir <- "./data"
+if(!dir.exists("./data")) dir.create("./data")
+setwd(currdir)
+dburl <- "https://d396qusza40orc.cloudfront.net/exdata%2Fdata%2FNEI_data.zip"
+zip <- "Data for Peer Assessment.zip"
+download.file(dburl, zip)
+if(file.exists(zip)) unzip(zip)
+
+# Read data
+NEI <- readRDS("summarySCC_PM25.rds")
+SCC <- readRDS("Source_Classification_Code.rds")
+```
+
+## Total U.S. PM<sub>2.5</sub> Emissions
+
+```{R}
+total_by_year <- tapply(NEI$Emissions, NEI$year, sum)
+
+options(scipen=999)
+plot(names(total_by_year),total_by_year/1000, type = "l", xlab = "Year", ylab =expression(PM[2.5] ~ "Emissions (Per 1K Tons)"), main = expression("Total U.S." ~ PM[2.5] ~ "Emissions by Year"), lwd=5)
+```
+
+The plot shows that total emissions have decreased significantly over time.
+
+## Total Baltimore City PM<sub>2.5</sub> Emissions
+
+```{R}
+#Creating a subset of Baltimore city
+
+Baltimore <- subset(NEI, fips =="24510")
+
+#Grouping  by year
+baltimore_by_year <- tapply(Baltimore$Emissions, Baltimore$year, sum)
+
+options(scipen=999)
+plot(names(baltimore_by_year),baltimore_by_year/1000, type = "l", xlab = "Year", ylab =expression(PM[2.5] ~ "Emissions (Per 1K Tons)"), main = expression("Total Baltimore" ~ PM[2.5] ~ "Emissions by Year"), lwd=5)
+```
+
+The graph shows that emissions decreased in total, but there was an increase from 2002 to 2005.
+
+## Total Baltimore City PM<sub>2.5</sub> Emissions by Type
+
+Of the four types of sources indicated by the type (point, nonpoint, onroad, nonroad) variable, we can analysis which of these four sources have seen decreases in emissions from 1999–2008 for Baltimore City.
+
+```{R}
+Baltype <- subset(NEI, fips =="24510")
+
+balimore_by_type <- aggregate(Baltype$Emissions, list(Baltype$type, Baltype$year),sum)
+names(balimore_by_type) <- c("Type","Year","Emissions")
+
+c <- qplot(Year,Emissions/1000, data = balimore_by_type, color = Type)+ geom_line(lwd=1.5) + ggtitle(expression("Baltimore" ~ PM[2.5] ~ "Emissions by Type and Year")) +
+           xlab("Year") + ylab(expression(PM[2.5] ~ "Emissions (Per 1K Tons)")) + theme(plot.title = element_text(hjust = .5))
+
+print(c)
+```
+
+As a result, we can determine every type except “Point” has shown a decreasing trend for Baltimore City.
+
+## Total Coal Combustion PM<sub>2.5</sub> Emissions
+
+```{R}
+# Across the United States, how have emissions from coal combustion-related sources changed from 1999-2008?
+scc_id <- as.character(SCC[grep("Coal",SCC$Short.Name, ignore.case = TRUE),1])
+#Combine the data sets
+coaldata <- subset(NEI, NEI$SCC %in% scc_id)
+
+
+# Subset the coal data
+coal <- tapply(coaldata$Emissions, coaldata$year, sum)
+
+options(scipen=999)
+plot(names(coal),total_by_year/1000, type = "l", xlab = "Year", ylab =expression(PM[2.5] ~ "Emissions (Per 1K Tons)"), main = expression("Total Coal Combustion" ~ PM[2.5] ~ "Emissions by Year"), lwd=5)
+```
+
+The plot shows that coal combustion emissions have decreased significantly over time.
+
+## Total Auto PM<sub>2.5</sub> Emissions in Baltimore
+
+```{R}
+scc_id2 <- as.character(SCC[grep("On-Road",SCC$EI.Sector),1])
+
+Baltimore2 <- subset(NEI, NEI$SCC %in% scc_id2 & NEI$fips == "24510")
+
+auto_by_year <- tapply(Baltimore2$Emissions, Baltimore2$year, sum)
+
+options(scipen=999)
+plot(names(auto_by_year),auto_by_year, type = "l", xlab = "Year", ylab =expression(PM[2.5] ~ "Emissions (Tons)"), main = expression("Total Baltimore" ~ PM[2.5] ~ " Auto Emissions by Year"), lwd=5)
+```
+
+The plot shows that auto emissions have decreased sharply from 1999 to 2002. Then, from 2002 to 2005, emissions remained approximately at the same level, and from 2005 to 2008, they decreased again.
+
+## Total Emissions in Baltimore and Los Angeles
+
+```{R}
+scc_id3 <- as.character(SCC[grep("On-Road",SCC$EI.Sector),1])
+
+BaltLA <- subset(NEI, NEI$SCC %in% scc_id3 & NEI$fips %in% c("24510","06037"))
+
+comp_by_year <- aggregate(Emissions ~ fips+year,BaltLA,sum)
+comp_by_year$fips <- ifelse(comp_by_year$fips == "06037", "Los Angeles","Baltimore")
+names(comp_by_year) <- c("City","Year","Emissions")
+
+options(scipen=999)
+qplot(Year,Emissions/1000, data = comp_by_year, color = City)+ geom_line(lwd=1.5) + ggtitle(expression("Baltimore and LA" ~ PM[2.5] ~ "Emissions by Year")) +
+  xlab("Year") + ylab(expression(PM[2.5] ~ "Emissions (Per 1K Tons)")) + theme(plot.title = element_text(hjust = .5))
+```
+
+Los Angeles has much higher emissions than Baltimore City and also shows a slight increasing trend.
+
+## Some conclusions
+
+According to visual analysis, we can assert that emissions have decreased during the period 1999-2008.
